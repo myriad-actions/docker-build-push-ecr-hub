@@ -1,0 +1,58 @@
+name: 'Build and Push Docker Image to ECR'
+description: 'Builds a Docker image and pushes it to Amazon ECR.'
+
+inputs:
+  iam-role-aws:
+    description: 'The IAM role to assume for AWS credentials.'
+    required: true
+  aws-region:
+    description: 'The AWS region to use.'
+    required: true
+    default: 'eu-west-1'
+  env:
+    description: 'The environment (e.g., dev, prod).'
+    required: true
+  app:
+    description: 'The name of the application.'
+    required: true
+  app-version:
+    description: 'The version of the application.'
+    required: true
+  short-sha:
+    description: 'The short SHA of the Git commit.'
+    required: true
+  dockerfile-path:
+    description: 'The path to the Dockerfile.'
+    required: true
+    default: '.docker/Dockerfile'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.iam-role-aws }}
+        aws-region: ${{ inputs.aws-region }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build, tag, and push image to ECR
+      env:
+        REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        VERSION: ${{ inputs.app-version }}-${{ inputs.short-sha }}
+      run: |
+        docker buildx build \
+          --platform linux/amd64 \
+          --push \
+          -t $REGISTRY/hub/${{ inputs.env }}/${{ inputs.app }}:${VERSION} \
+          -f ${{ inputs.dockerfile-path }} .
+      shell: bash
